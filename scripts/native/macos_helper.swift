@@ -484,18 +484,23 @@ func resolveTargetApp(appName: String?, pid: Int?) -> NSRunningApplication? {
     return NSWorkspace.shared.frontmostApplication
 }
 
-func requireAccessibility() throws {
-    if !AXIsProcessTrusted() {
-        throw NSError(
-            domain: "ComputerUse",
-            code: 403,
-            userInfo: [NSLocalizedDescriptionKey: "macOS Accessibility permission is not granted for this process (AXIsProcessTrusted=false). Enable Antigravity (and restart Antigravity if already toggled) under System Settings -> Privacy & Security -> Accessibility."]
-        )
+func probeAccessibility() -> Bool {
+    if AXIsProcessTrusted() { return true }
+    let sysWide = AXUIElementCreateSystemWide()
+    var focused: AnyObject?
+    let err = AXUIElementCopyAttributeValue(sysWide, kAXFocusedApplicationAttribute as CFString, &focused)
+    if err == .success && focused != nil { return true }
+    if let app = NSWorkspace.shared.frontmostApplication {
+        let axApp = AXUIElementCreateApplication(app.processIdentifier)
+        var wins: AnyObject?
+        if AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &wins) == .success {
+            return true
+        }
     }
+    return false
 }
 
 func getUiTree(appName: String?, pid: Int?, maxDepth: Int, maxNodes: Int, interactiveOnly: Bool) throws -> [String: Any] {
-    try requireAccessibility()
     guard let app = resolveTargetApp(appName: appName, pid: pid) else {
         throw NSError(domain: "ComputerUse", code: 404, userInfo: [NSLocalizedDescriptionKey: "Target application not found."])
     }
@@ -714,11 +719,13 @@ while let line = readLine(strippingNewline: true) {
             ])
 
         case "check_permissions":
-            let ax = AXIsProcessTrusted()
+            let axTrusted = AXIsProcessTrusted()
+            let ax = probeAccessibility()
             let sr = CGPreflightScreenCaptureAccess()
             okOut(id, [
                 "os": "macos",
                 "accessibility": ax,
+                "ax_is_process_trusted": axTrusted,
                 "screen_recording": sr,
                 "remediation": (ax && sr) ? "All required macOS permissions are granted." :
                     "Grant permissions in System Settings -> Privacy & Security -> Screen & System Audio Recording and Accessibility for your terminal / Antigravity app."
@@ -736,7 +743,6 @@ while let line = readLine(strippingNewline: true) {
             okOut(id, try captureScreenshot(p))
 
         case "mouse_move":
-            try requireAccessibility()
             let tx = (p["x"] as? Double) ?? 0
             let ty = (p["y"] as? Double) ?? 0
             let dur = max(0, (p["duration_ms"] as? Int) ?? 0)
@@ -755,7 +761,6 @@ while let line = readLine(strippingNewline: true) {
             okOut(id, ["ok": true, "x": Int(round(tx)), "y": Int(round(ty))])
 
         case "mouse_click":
-            try requireAccessibility()
             let cur = currentCursorPoint()
             let pt = CGPoint(x: (p["x"] as? Double) ?? Double(cur.x), y: (p["y"] as? Double) ?? Double(cur.y))
             let (btn, downT, upT, _) = mapMouseButton(p["button"] as? String)
@@ -772,7 +777,6 @@ while let line = readLine(strippingNewline: true) {
             okOut(id, ["ok": true])
 
         case "mouse_down":
-            try requireAccessibility()
             let cur = currentCursorPoint()
             let pt = CGPoint(x: (p["x"] as? Double) ?? Double(cur.x), y: (p["y"] as? Double) ?? Double(cur.y))
             let (btn, downT, _, _) = mapMouseButton(p["button"] as? String)
@@ -780,7 +784,6 @@ while let line = readLine(strippingNewline: true) {
             okOut(id, ["ok": true])
 
         case "mouse_up":
-            try requireAccessibility()
             let cur = currentCursorPoint()
             let pt = CGPoint(x: (p["x"] as? Double) ?? Double(cur.x), y: (p["y"] as? Double) ?? Double(cur.y))
             let (btn, _, upT, _) = mapMouseButton(p["button"] as? String)
@@ -788,7 +791,6 @@ while let line = readLine(strippingNewline: true) {
             okOut(id, ["ok": true])
 
         case "mouse_drag":
-            try requireAccessibility()
             let sx = (p["start_x"] as? Double) ?? 0
             let sy = (p["start_y"] as? Double) ?? 0
             let ex = (p["end_x"] as? Double) ?? 0
@@ -809,7 +811,6 @@ while let line = readLine(strippingNewline: true) {
             okOut(id, ["ok": true])
 
         case "mouse_scroll":
-            try requireAccessibility()
             let cur = currentCursorPoint()
             let pt = CGPoint(x: (p["x"] as? Double) ?? Double(cur.x), y: (p["y"] as? Double) ?? Double(cur.y))
             postMouse(.mouseMoved, pt, .left)
@@ -821,14 +822,12 @@ while let line = readLine(strippingNewline: true) {
             okOut(id, ["ok": true])
 
         case "type_text":
-            try requireAccessibility()
             let text = (p["text"] as? String) ?? ""
             let delay = max(0, (p["delay_ms"] as? Int) ?? 0)
             typeUnicodeText(text, delayMs: delay)
             okOut(id, ["ok": true, "length": text.count])
 
         case "press_key", "hotkey":
-            try requireAccessibility()
             let key = ((p["key"] as? String) ?? "").lowercased()
             let mods = (p["modifiers"] as? [String]) ?? []
             let flags = modifierFlags(mods)
@@ -851,7 +850,6 @@ while let line = readLine(strippingNewline: true) {
             okOut(id, ["ok": true])
 
         case "key_down":
-            try requireAccessibility()
             let key = ((p["key"] as? String) ?? "").lowercased()
             guard let code = KEY_CODES[key] else {
                 throw NSError(domain: "ComputerUse", code: 400, userInfo: [NSLocalizedDescriptionKey: "Unsupported macOS key: '\(key)'"])
@@ -860,7 +858,6 @@ while let line = readLine(strippingNewline: true) {
             okOut(id, ["ok": true])
 
         case "key_up":
-            try requireAccessibility()
             let key = ((p["key"] as? String) ?? "").lowercased()
             guard let code = KEY_CODES[key] else {
                 throw NSError(domain: "ComputerUse", code: 400, userInfo: [NSLocalizedDescriptionKey: "Unsupported macOS key: '\(key)'"])

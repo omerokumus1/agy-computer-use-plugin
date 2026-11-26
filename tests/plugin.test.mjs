@@ -201,14 +201,14 @@ test("MCP server initializes, lists 26 tools, and executes live host read-only t
     assert.ok(!waitRes.result.isError);
     assert.equal(JSON.parse(waitRes.result.content[0].text).waited_ms, 50);
 
-    // Accessibility & input checks (live if granted, explicit error if not)
+    // Accessibility & input checks (live if granted, clean structure otherwise)
     const permsJson = JSON.parse(perms.result.content[0].text);
     const uiRes = await rpc(16, "tools/call", { name: "get_ui_tree", arguments: { max_depth: 3, max_nodes: 25, interactive_only: true } });
-    if (permsJson.accessibility) {
-      assert.ok(!uiRes.result.isError, uiRes.result.content[0].text);
-      const uiJson = JSON.parse(uiRes.result.content[0].text);
-      assert.ok(Array.isArray(uiJson.elements));
+    assert.ok(!uiRes.result.isError, uiRes.result.content[0].text);
+    const uiJson = JSON.parse(uiRes.result.content[0].text);
+    assert.ok(Array.isArray(uiJson.elements));
 
+    if (permsJson.accessibility) {
       const beforeCur = screenJson.cursor;
       const targetX = Math.max(10, beforeCur.x + 12);
       const targetY = Math.max(10, beforeCur.y + 12);
@@ -217,9 +217,6 @@ test("MCP server initializes, lists 26 tools, and executes live host read-only t
       const afterScreen = JSON.parse((await rpc(18, "tools/call", { name: "get_screen_info", arguments: {} })).result.content[0].text);
       assert.ok(Math.abs(afterScreen.cursor.x - targetX) <= 3 && Math.abs(afterScreen.cursor.y - targetY) <= 3);
       await rpc(19, "tools/call", { name: "mouse_move", arguments: { x: beforeCur.x, y: beforeCur.y } });
-    } else {
-      assert.equal(uiRes.result.isError, true);
-      assert.match(uiRes.result.content[0].text, /Accessibility/i);
     }
 
     // Unknown tool returns isError=true cleanly
