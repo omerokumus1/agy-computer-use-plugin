@@ -1,0 +1,30 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "computer-use",
+  "displayName": "Computer Use",
+  "version": "0.1.0",
+  "description": "Full cross-platform desktop computer use for macOS and Windows: vision screenshots, mouse/keyboard control, accessibility UI trees, windows, and clipboard.",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Take a screenshot and summarize all open windows on my desktop",
+    "Inspect the accessibility UI tree of the active application and list clickable controls",
+    "Check my OS permissions and display layout for computer use"
+  ],
+  "author": {
+    "name": "omerokumus1",
+    "url": "https://github.com/omerokumus1"
+  },
+  "homepage": "https://github.com/omerokumus1/agy-computer-use-plugin",
+  "repository": "https://github.com/omerokumus1/agy-computer-use-plugin",
+  "license": "MIT",
+  "keywords": [
+    "computer-use",
+    "desktop-automation",
+    "gui",
+    "macos",
+    "windows",
+    "accessibility",
+    "screenshot",
+    "mcp"
+  ]
+}

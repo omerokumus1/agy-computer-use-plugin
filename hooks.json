@@ -1,0 +1,17 @@
+{
+  "computer-use-safety": {
+    "enabled": true,
+    "PreToolUse": [
+      {
+        "matcher": "mcp_computer-use.*|computer-use.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ./scripts/safety-hook.mjs",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

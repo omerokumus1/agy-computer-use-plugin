@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "desktop": {
+      "command": "node",
+      "args": [
+        "${PLUGIN_ROOT}/scripts/mcp-server.mjs"
+      ],
+      "timeoutSeconds": 60,
+      "tools": {
+        "screenshot": { "eager": true },
+        "get_screen_info": { "eager": true },
+        "mouse_click": { "eager": true },
+        "mouse_drag": { "eager": true },
+        "mouse_scroll": { "eager": true },
+        "type_text": { "eager": true },
+        "press_key": { "eager": true },
+        "hotkey": { "eager": true },
+        "get_ui_tree": { "eager": true },
+        "click_ui_element": { "eager": true },
+        "list_windows": { "eager": true },
+        "focus_window": { "eager": true }
+      }
+    }
+  }
+}
