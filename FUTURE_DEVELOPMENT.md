@@ -105,9 +105,10 @@ Combining `computer-use` with [`agy-context-plugin`](https://github.com/omerokum
 
 ### 5. UI/UX & Human-in-the-Loop Control (Overlay, `Esc` State Machine & Visual Feedback)
 
-19. **Gemini-Style Edge Glow Overlay (`Active` / `Dimmed` / `Off`)**
+19. **Gemini-Style Edge Glow Overlay (`Active` / `Action Pulse` / `Dimmed` / `Off`)**
     - Render a lightweight, click-through, always-on-top transparent border overlay around the active monitor(s) whenever Antigravity is driving the computer (macOS `NSWindow` with `ignoresMouseEvents = true` + CoreAnimation/Metal shader; Windows `WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_TOPMOST` overlay):
       - **Active**: Flowing Gemini-inspired luminous edge animation along the screen perimeter so the user always knows at a glance that autonomous desktop control is active.
+      - **Action Pulse**: Trigger a crisp luminous pulse/ripple wave along the border animation whenever Antigravity performs an action (`mouse_click`, `mouse_drag`, `type_text`, `hotkey`, `click_ui_element`), subtly peaking near the target quadrant for instant peripheral feedback.
       - **Paused / Waiting**: Smoothly dims the edge animation when control is yielded to the user.
       - **Stopped**: Fades out completely when computer use ends or is hard-stopped.
     - Exclude the overlay window itself from `screenshot` captures (`kCGWindowSharingNone` / `WDA_EXCLUDEFROMCAPTURE`) so the glow never obscures visual grounding or wastes vision tokens.
@@ -144,32 +145,38 @@ Combining `computer-use` with [`agy-context-plugin`](https://github.com/omerokum
         HardStopped --> [*]: Requires new user prompt
     ```
 
-21. **Floating Action HUD & Click/Target Micro-Feedback**
+21. **Animating Gradient AI Cursor (`Active` vs Restored System Cursor)**
+    - While Antigravity is actively operating the computer, replace or overlay the pointer with a smooth **animating gradient cursor** (e.g., Gemini blue-violet-cyan flowing gradient) synchronized with the edge glow:
+      - **macOS**: Render via a lightweight click-through cursor-tracking `NSWindow` (`kCGWindowSharingNone`) or animated `NSCursor` frame cycle pinned to `CGEvent.location` (restoring the native pointer instantly on pause/stop).
+      - **Windows**: Render via a `WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_TOPMOST` (`WDA_EXCLUDEFROMCAPTURE`) cursor overlay or animated `.ani` `SetSystemCursor` with guaranteed `SystemParametersInfo(SPI_SETCURSORS)` cleanup on exit/crash.
+      - Immediately reverts to the user's standard system cursor during `SmartPause`, `ManualHold`, or `HardStopped` so manual control always feels native.
+
+22. **Floating Action HUD & Click/Target Micro-Feedback**
     - **Compact Floating HUD Pill**: A translucent corner pill (draggable, minimized footprint) showing the live step label (e.g., `"Clicking 'Export' in Figma"`), current `Esc` mode badge, and one-click **Pause / Resume / Stop** controls.
     - **Pre-Click Target Ripple & Drag Trail**: Briefly animate a subtle translucent ring at `(x, y)` (~150ms) right before clicking or along drag paths so the user can visually track intent before impact.
     - **Active Window Spotlight**: Optionally outline the specific `window_id` Antigravity is currently controlling across multi-monitor setups.
 
-22. **Automatic Mouse-Fight Detection ("Touch-to-Yield")**
+23. **Automatic Mouse-Fight Detection ("Touch-to-Yield")**
     - Optionally detect unexpected physical mouse movement or keystrokes from the user during an active run (even without pressing `Esc`), automatically entering the **Smart Pause** state so the user never fights the cursor.
 
-23. **Subtle Sound & Haptic Micro-Cues (Opt-In)**
+24. **Subtle Sound & Haptic Micro-Cues (Opt-In)**
     - Play quiet, distinct system/WebAudio micro-tones (or Mac Force Touch haptics) for **Takeover**, **Paused**, **Countdown Tick**, and **Hard Stop**, helpful when the user is looking across multiple displays.
 
 ---
 
 ## Longer-Term Ecosystem Roadmap (v0.4.0 – v1.0.0)
 
-24. **Built-In Native OCR (`VNRecognizeTextRequest` & `Windows.Media.Ocr`)**
+25. **Built-In Native OCR (`VNRecognizeTextRequest` & `Windows.Media.Ocr`)**
     - Add a `find_text_on_screen` tool using OS-built-in OCR for Canvas apps, Electron views, games, and remote desktop windows with sparse accessibility trees.
 
-25. **Windows CI & Automated Integration Matrix**
+26. **Windows CI & Automated Integration Matrix**
     - Add GitHub Actions CI (`macos-latest` + `windows-latest`) running `agy plugin validate --strict .`, MCP protocol tests, PowerShell/Win32/UIA live tests, and coordinate scaling assertions on every commit.
 
-26. **Macro Recording & Deterministic Replay**
+27. **Macro Recording & Deterministic Replay**
     - Save verified UI-element action sequences into `${PLUGIN_DATA}/macros/*.json` for zero-LLM-token deterministic replay of repetitive desktop workflows.
 
-27. **Linux Desktop Driver (X11 & Wayland)**
+28. **Linux Desktop Driver (X11 & Wayland)**
     - Add `scripts/drivers/linux.mjs` supporting X11 (`xdotool`/`xrandr`/`scrot`/AT-SPI2) and Wayland (`ydotool`/`grim`/`xdg-desktop-portal`).
 
-28. **Virtual / Secondary Desktop Isolation**
+29. **Virtual / Secondary Desktop Isolation**
     - Support Windows Virtual Desktops (`IVirtualDesktopManager`) and dedicated macOS Spaces so autonomous desktop work can run in the background without stealing the user's primary workspace focus.
