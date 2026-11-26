@@ -143,13 +143,30 @@ test("MCP server initializes, lists 26 tools, and executes live host read-only t
     const wins = await rpc(6, "tools/call", { name: "list_windows", arguments: {} });
     assert.ok(!wins.result.isError);
     const winsJson = JSON.parse(wins.result.content[0].text);
-    assert.ok(Array.isArray(winsJson));
+    assert.ok(Array.isArray(winsJson) && winsJson.length >= 1);
+    for (const w of winsJson) {
+      assert.ok(w.bounds.width > 60 || w.bounds.height > 60, `Unexpected tiny window: ${JSON.stringify(w)}`);
+    }
 
     const apps = await rpc(7, "tools/call", { name: "list_running_apps", arguments: {} });
     assert.ok(!apps.result.isError);
     assert.ok(JSON.parse(apps.result.content[0].text).length >= 1);
 
-    const shot = await rpc(8, "tools/call", {
+    // Clipboard roundtrip (preserve original text)
+    const prevClip = await rpc(8, "tools/call", { name: "clipboard_read", arguments: {} });
+    const prevClipJson = JSON.parse(prevClip.result.content[0].text);
+    const sentinel = `cu-test-${Date.now()}`;
+    const clipWrite = await rpc(9, "tools/call", { name: "clipboard_write", arguments: { text: sentinel } });
+    assert.ok(!clipWrite.result.isError);
+    const clipRead = await rpc(10, "tools/call", { name: "clipboard_read", arguments: {} });
+    assert.equal(JSON.parse(clipRead.result.content[0].text).text, sentinel);
+    if (prevClipJson.has_text) {
+      await rpc(11, "tools/call", { name: "clipboard_write", arguments: { text: prevClipJson.text } });
+    }
+
+    // Screenshots: JPEG + grid, PNG + region + save_path, secondary display, app window
+    const shotPath = path.join(tmpData, "test-region.png");
+    const shot = await rpc(12, "tools/call", {
       name: "screenshot",
       arguments: { max_width: 640, format: "jpeg", grid: true },
     });
@@ -159,10 +176,55 @@ test("MCP server initializes, lists 26 tools, and executes live host read-only t
       assert.ok(shot.result.content[0].data.length > 500);
       const meta = JSON.parse(shot.result.content[1].text);
       assert.ok(meta.image_size.width <= 640);
+
+      const regionShot = await rpc(13, "tools/call", {
+        name: "screenshot",
+        arguments: { region: { x: 0, y: 0, width: 400, height: 300 }, format: "png", max_width: 0, save_path: shotPath },
+      });
+      assert.ok(!regionShot.result.isError, regionShot.result.content[0].text);
+      assert.equal(regionShot.result.content[0].mimeType, "image/png");
+      assert.ok(fs.existsSync(shotPath) && fs.statSync(shotPath).size > 500);
+
+      if (screenJson.displays.length > 1) {
+        const disp2Shot = await rpc(14, "tools/call", {
+          name: "screenshot",
+          arguments: { display_id: 1, max_width: 480, format: "jpeg" },
+        });
+        assert.ok(!disp2Shot.result.isError, disp2Shot.result.content[0].text);
+      }
     } else {
-      // If headless environment lacks Screen Recording permission, verify clear error message
       assert.match(shot.result.content[0].text, /Screen Recording|screencapture/i);
     }
+
+    // Wait tool (+ optional screenshot)
+    const waitRes = await rpc(15, "tools/call", { name: "wait", arguments: { ms: 50, capture_screenshot: false } });
+    assert.ok(!waitRes.result.isError);
+    assert.equal(JSON.parse(waitRes.result.content[0].text).waited_ms, 50);
+
+    // Accessibility & input checks (live if granted, explicit error if not)
+    const permsJson = JSON.parse(perms.result.content[0].text);
+    const uiRes = await rpc(16, "tools/call", { name: "get_ui_tree", arguments: { max_depth: 3, max_nodes: 25, interactive_only: true } });
+    if (permsJson.accessibility) {
+      assert.ok(!uiRes.result.isError, uiRes.result.content[0].text);
+      const uiJson = JSON.parse(uiRes.result.content[0].text);
+      assert.ok(Array.isArray(uiJson.elements));
+
+      const beforeCur = screenJson.cursor;
+      const targetX = Math.max(10, beforeCur.x + 12);
+      const targetY = Math.max(10, beforeCur.y + 12);
+      const mv = await rpc(17, "tools/call", { name: "mouse_move", arguments: { x: targetX, y: targetY } });
+      assert.ok(!mv.result.isError);
+      const afterScreen = JSON.parse((await rpc(18, "tools/call", { name: "get_screen_info", arguments: {} })).result.content[0].text);
+      assert.ok(Math.abs(afterScreen.cursor.x - targetX) <= 3 && Math.abs(afterScreen.cursor.y - targetY) <= 3);
+      await rpc(19, "tools/call", { name: "mouse_move", arguments: { x: beforeCur.x, y: beforeCur.y } });
+    } else {
+      assert.equal(uiRes.result.isError, true);
+      assert.match(uiRes.result.content[0].text, /Accessibility/i);
+    }
+
+    // Unknown tool returns isError=true cleanly
+    const unknown = await rpc(20, "tools/call", { name: "nonexistent_tool", arguments: {} });
+    assert.equal(unknown.result.isError, true);
   } finally {
     server.kill();
     fs.rmSync(tmpData, { recursive: true, force: true });

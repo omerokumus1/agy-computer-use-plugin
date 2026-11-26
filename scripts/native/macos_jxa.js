@@ -82,9 +82,13 @@ function listWindows(appFilter, includeMinimized) {
     const title = w.kCGWindowName || "";
     const pid = w.kCGWindowOwnerPID || 0;
     const onScreen = Boolean(w.kCGWindowIsOnscreen);
+    const alpha = w.kCGWindowAlpha !== undefined ? w.kCGWindowAlpha : 1;
+    if (alpha <= 0.01) continue;
     if (!includeMinimized && !onScreen) continue;
     const b = w.kCGWindowBounds || {};
-    if ((b.Width || 0) <= 1 || (b.Height || 0) <= 1) continue;
+    if ((b.Width || 0) <= 60 && (b.Height || 0) <= 60) continue;
+    if ((b.Height || 0) <= 28 && (b.Width || 0) >= 800 && !title) continue;
+    if (!title && !onScreen) continue;
     if (appFilter) {
       const f = appFilter.toLowerCase();
       if (!owner.toLowerCase().includes(f) && !title.toLowerCase().includes(f)) continue;

@@ -132,14 +132,18 @@ func listWindows(appFilter: String?, includeMinimized: Bool) -> [[String: Any]] 
         let pid = (w[kCGWindowOwnerPID as String] as? Int32) ?? 0
         let winId = (w[kCGWindowNumber as String] as? Int) ?? 0
         let onScreen = (w[kCGWindowIsOnscreen as String] as? Bool) ?? false
+        let alpha = (w[kCGWindowAlpha as String] as? Double) ?? 1.0
 
+        if alpha <= 0.01 { continue }
         if !includeMinimized && !onScreen { continue }
         guard let bDict = w[kCGWindowBounds as String] as? [String: Any],
               let bx = bDict["X"] as? Double,
               let by = bDict["Y"] as? Double,
               let bw = bDict["Width"] as? Double,
               let bh = bDict["Height"] as? Double else { continue }
-        if bw <= 1 || bh <= 1 { continue }
+        if bw <= 60 && bh <= 60 { continue }
+        if bh <= 28 && bw >= 800 && title.isEmpty { continue }
+        if title.isEmpty && !onScreen { continue }
 
         if let f = appFilter, !f.isEmpty {
             let matchesOwner = owner.range(of: f, options: .caseInsensitive) != nil
@@ -480,7 +484,18 @@ func resolveTargetApp(appName: String?, pid: Int?) -> NSRunningApplication? {
     return NSWorkspace.shared.frontmostApplication
 }
 
+func requireAccessibility() throws {
+    if !AXIsProcessTrusted() {
+        throw NSError(
+            domain: "ComputerUse",
+            code: 403,
+            userInfo: [NSLocalizedDescriptionKey: "macOS Accessibility permission is not granted for this process (AXIsProcessTrusted=false). Enable Antigravity (and restart Antigravity if already toggled) under System Settings -> Privacy & Security -> Accessibility."]
+        )
+    }
+}
+
 func getUiTree(appName: String?, pid: Int?, maxDepth: Int, maxNodes: Int, interactiveOnly: Bool) throws -> [String: Any] {
+    try requireAccessibility()
     guard let app = resolveTargetApp(appName: appName, pid: pid) else {
         throw NSError(domain: "ComputerUse", code: 404, userInfo: [NSLocalizedDescriptionKey: "Target application not found."])
     }
@@ -721,6 +736,7 @@ while let line = readLine(strippingNewline: true) {
             okOut(id, try captureScreenshot(p))
 
         case "mouse_move":
+            try requireAccessibility()
             let tx = (p["x"] as? Double) ?? 0
             let ty = (p["y"] as? Double) ?? 0
             let dur = max(0, (p["duration_ms"] as? Int) ?? 0)
@@ -739,6 +755,7 @@ while let line = readLine(strippingNewline: true) {
             okOut(id, ["ok": true, "x": Int(round(tx)), "y": Int(round(ty))])
 
         case "mouse_click":
+            try requireAccessibility()
             let cur = currentCursorPoint()
             let pt = CGPoint(x: (p["x"] as? Double) ?? Double(cur.x), y: (p["y"] as? Double) ?? Double(cur.y))
             let (btn, downT, upT, _) = mapMouseButton(p["button"] as? String)
@@ -755,6 +772,7 @@ while let line = readLine(strippingNewline: true) {
             okOut(id, ["ok": true])
 
         case "mouse_down":
+            try requireAccessibility()
             let cur = currentCursorPoint()
             let pt = CGPoint(x: (p["x"] as? Double) ?? Double(cur.x), y: (p["y"] as? Double) ?? Double(cur.y))
             let (btn, downT, _, _) = mapMouseButton(p["button"] as? String)
@@ -762,6 +780,7 @@ while let line = readLine(strippingNewline: true) {
             okOut(id, ["ok": true])
 
         case "mouse_up":
+            try requireAccessibility()
             let cur = currentCursorPoint()
             let pt = CGPoint(x: (p["x"] as? Double) ?? Double(cur.x), y: (p["y"] as? Double) ?? Double(cur.y))
             let (btn, _, upT, _) = mapMouseButton(p["button"] as? String)
@@ -769,6 +788,7 @@ while let line = readLine(strippingNewline: true) {
             okOut(id, ["ok": true])
 
         case "mouse_drag":
+            try requireAccessibility()
             let sx = (p["start_x"] as? Double) ?? 0
             let sy = (p["start_y"] as? Double) ?? 0
             let ex = (p["end_x"] as? Double) ?? 0
@@ -789,6 +809,7 @@ while let line = readLine(strippingNewline: true) {
             okOut(id, ["ok": true])
 
         case "mouse_scroll":
+            try requireAccessibility()
             let cur = currentCursorPoint()
             let pt = CGPoint(x: (p["x"] as? Double) ?? Double(cur.x), y: (p["y"] as? Double) ?? Double(cur.y))
             postMouse(.mouseMoved, pt, .left)
@@ -800,12 +821,14 @@ while let line = readLine(strippingNewline: true) {
             okOut(id, ["ok": true])
 
         case "type_text":
+            try requireAccessibility()
             let text = (p["text"] as? String) ?? ""
             let delay = max(0, (p["delay_ms"] as? Int) ?? 0)
             typeUnicodeText(text, delayMs: delay)
             okOut(id, ["ok": true, "length": text.count])
 
         case "press_key", "hotkey":
+            try requireAccessibility()
             let key = ((p["key"] as? String) ?? "").lowercased()
             let mods = (p["modifiers"] as? [String]) ?? []
             let flags = modifierFlags(mods)
@@ -828,6 +851,7 @@ while let line = readLine(strippingNewline: true) {
             okOut(id, ["ok": true])
 
         case "key_down":
+            try requireAccessibility()
             let key = ((p["key"] as? String) ?? "").lowercased()
             guard let code = KEY_CODES[key] else {
                 throw NSError(domain: "ComputerUse", code: 400, userInfo: [NSLocalizedDescriptionKey: "Unsupported macOS key: '\(key)'"])
@@ -836,6 +860,7 @@ while let line = readLine(strippingNewline: true) {
             okOut(id, ["ok": true])
 
         case "key_up":
+            try requireAccessibility()
             let key = ((p["key"] as? String) ?? "").lowercased()
             guard let code = KEY_CODES[key] else {
                 throw NSError(domain: "ComputerUse", code: 400, userInfo: [NSLocalizedDescriptionKey: "Unsupported macOS key: '\(key)'"])
