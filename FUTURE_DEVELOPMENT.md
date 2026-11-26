@@ -103,19 +103,73 @@ Combining `computer-use` with [`agy-context-plugin`](https://github.com/omerokum
 
 ---
 
+### 5. UI/UX & Human-in-the-Loop Control (Overlay, `Esc` State Machine & Visual Feedback)
+
+19. **Gemini-Style Edge Glow Overlay (`Active` / `Dimmed` / `Off`)**
+    - Render a lightweight, click-through, always-on-top transparent border overlay around the active monitor(s) whenever Antigravity is driving the computer (macOS `NSWindow` with `ignoresMouseEvents = true` + CoreAnimation/Metal shader; Windows `WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_TOPMOST` overlay):
+      - **Active**: Flowing Gemini-inspired luminous edge animation along the screen perimeter so the user always knows at a glance that autonomous desktop control is active.
+      - **Paused / Waiting**: Smoothly dims the edge animation when control is yielded to the user.
+      - **Stopped**: Fades out completely when computer use ends or is hard-stopped.
+    - Exclude the overlay window itself from `screenshot` captures (`kCGWindowSharingNone` / `WDA_EXCLUDEFROMCAPTURE`) so the glow never obscures visual grounding or wastes vision tokens.
+
+20. **Three-Tier `Esc` Interrupt & Yield State Machine**
+    - Intercept global `Esc` key presses via a low-overhead OS input listener (`CGEventTap` listen-only on macOS; `WH_KEYBOARD_LL` on Windows) without blocking normal `Esc` usage inside apps:
+      1. **Single `Esc` (Smart Pause & Idle-Triggered Resume Countdown)**:
+         - Immediately pauses Antigravity's next desktop action and dims the edge glow animation.
+         - Monitors user mouse/keyboard activity and waits until the user finishes interacting and remains idle for a couple of seconds (e.g., `2–3s`).
+         - Once idle, shows a compact floating confirmation dialog/pill with a short countdown (e.g., `3–5s`):
+           - **Confirm** or **countdown expires**: Antigravity restores full edge glow and resumes control.
+           - **Reject**: Antigravity stays paused and keeps waiting (no forced takeover).
+      2. **Double `Esc` (Manual Hold — No Countdown)**:
+         - Pressing `Esc` twice enters **Manual Hold** mode: Antigravity pauses indefinitely and does **not** start any auto-resume countdown.
+         - The user remains in full control until they explicitly tell Antigravity to continue (via a **Resume** button on the floating HUD or a chat instruction).
+      3. **Long-Press `Esc` (Hard Stop)**:
+         - Holding `Esc` (e.g., `>= 800ms`) triggers a **Hard Stop** (`EMERGENCY_STOP`), dismissing the edge glow and terminating the active computer-use run completely.
+         - Antigravity does not resume on its own; the user must submit a new prompt to start again.
+
+    ```mermaid
+    stateDiagram-v2
+        [*] --> Active: Start Computer Use (Edge Glow ON)
+        Active --> SmartPause: Single Esc (Edge Glow DIMMED)
+        SmartPause --> IdleWait: User active -> wait for 2-3s idle
+        IdleWait --> CountdownToast: User idle -> show confirm dialog (3-5s)
+        CountdownToast --> Active: Confirm or countdown finishes
+        CountdownToast --> SmartPause: User rejects (keep waiting)
+        Active --> ManualHold: Double Esc (Edge Glow DIMMED, no countdown)
+        SmartPause --> ManualHold: Second Esc
+        ManualHold --> Active: User explicitly resumes
+        Active --> HardStopped: Long-press Esc (Edge Glow OFF)
+        SmartPause --> HardStopped: Long-press Esc
+        ManualHold --> HardStopped: Long-press Esc
+        HardStopped --> [*]: Requires new user prompt
+    ```
+
+21. **Floating Action HUD & Click/Target Micro-Feedback**
+    - **Compact Floating HUD Pill**: A translucent corner pill (draggable, minimized footprint) showing the live step label (e.g., `"Clicking 'Export' in Figma"`), current `Esc` mode badge, and one-click **Pause / Resume / Stop** controls.
+    - **Pre-Click Target Ripple & Drag Trail**: Briefly animate a subtle translucent ring at `(x, y)` (~150ms) right before clicking or along drag paths so the user can visually track intent before impact.
+    - **Active Window Spotlight**: Optionally outline the specific `window_id` Antigravity is currently controlling across multi-monitor setups.
+
+22. **Automatic Mouse-Fight Detection ("Touch-to-Yield")**
+    - Optionally detect unexpected physical mouse movement or keystrokes from the user during an active run (even without pressing `Esc`), automatically entering the **Smart Pause** state so the user never fights the cursor.
+
+23. **Subtle Sound & Haptic Micro-Cues (Opt-In)**
+    - Play quiet, distinct system/WebAudio micro-tones (or Mac Force Touch haptics) for **Takeover**, **Paused**, **Countdown Tick**, and **Hard Stop**, helpful when the user is looking across multiple displays.
+
+---
+
 ## Longer-Term Ecosystem Roadmap (v0.4.0 – v1.0.0)
 
-19. **Built-In Native OCR (`VNRecognizeTextRequest` & `Windows.Media.Ocr`)**
+24. **Built-In Native OCR (`VNRecognizeTextRequest` & `Windows.Media.Ocr`)**
     - Add a `find_text_on_screen` tool using OS-built-in OCR for Canvas apps, Electron views, games, and remote desktop windows with sparse accessibility trees.
 
-20. **Windows CI & Automated Integration Matrix**
+25. **Windows CI & Automated Integration Matrix**
     - Add GitHub Actions CI (`macos-latest` + `windows-latest`) running `agy plugin validate --strict .`, MCP protocol tests, PowerShell/Win32/UIA live tests, and coordinate scaling assertions on every commit.
 
-21. **Macro Recording & Deterministic Replay**
+26. **Macro Recording & Deterministic Replay**
     - Save verified UI-element action sequences into `${PLUGIN_DATA}/macros/*.json` for zero-LLM-token deterministic replay of repetitive desktop workflows.
 
-22. **Linux Desktop Driver (X11 & Wayland)**
+27. **Linux Desktop Driver (X11 & Wayland)**
     - Add `scripts/drivers/linux.mjs` supporting X11 (`xdotool`/`xrandr`/`scrot`/AT-SPI2) and Wayland (`ydotool`/`grim`/`xdg-desktop-portal`).
 
-23. **Virtual / Secondary Desktop Isolation**
+28. **Virtual / Secondary Desktop Isolation**
     - Support Windows Virtual Desktops (`IVirtualDesktopManager`) and dedicated macOS Spaces so autonomous desktop work can run in the background without stealing the user's primary workspace focus.
