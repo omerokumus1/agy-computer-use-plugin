@@ -83,19 +83,23 @@ Combining `computer-use` with [`agy-context-plugin`](https://github.com/omerokum
 
 ---
 
-### 4. Performance Optimization
+### 4. Performance Optimization & Telemetry-Driven Profiling
 
-15. **macOS `ScreenCaptureKit` In-Memory Pipeline (macOS 14+)**
+15. **Dev Telemetry Sub-Phase Tracing & Regression Gates (`perf-telemetry.jsonl`)**
+    - Expand v0.1's `COMPUTER_USE_TELEMETRY=1` / `get_perf_stats` / `scripts/perf-report.mjs` pipeline with fine-grained native sub-phase spans (`screencapture_ms`, `resize_encode_ms`, `ax_walk_ms`, `ipc_roundtrip_ms`, `hook_ms`) and OpenTelemetry / Chrome Trace export (`perfetto` / `chrome://tracing` JSON) for bottleneck flamegraphs.
+    - Enforce CI latency budgets on `macos-latest` and `windows-latest` (`input p95 < 20ms`, `get_ui_tree p95 < 150ms`, `screenshot p95 < 60ms`) and feed `bytes / ms` efficiency metrics into `agy-context-plugin`.
+
+16. **macOS `ScreenCaptureKit` In-Memory Pipeline (macOS 14+)**
     - Replace `/usr/sbin/screencapture` subprocess calls and temporary PNG disk files in `macos_helper.swift` with `ScreenCaptureKit` (`SCShareableContent` + `SCScreenshotManager`).
     - Cuts single-frame capture latency from ~120–200ms down to `< 40–60ms`, eliminates disk I/O, and supports capturing specific windows cleanly even when partially occluded.
 
-16. **Windows DXGI Desktop Duplication (`IDXGIOutputDuplication`)**
+17. **Windows DXGI Desktop Duplication (`IDXGIOutputDuplication`)**
     - Add a GPU-accelerated capture path alongside GDI+ `CopyFromScreen` in `win_worker.ps1` for sub-30ms multi-monitor captures and hardware-provided dirty-rect regions.
 
-17. **Pre-Built / Signed Native Helper Distribution**
+18. **Pre-Built / Signed Native Helper Distribution**
     - Distribute pre-compiled, signed universal binaries for macOS (`arm64` + `x86_64`) and an optional ahead-of-time compiled `.NET` helper DLL/executable on Windows to eliminate cold startup compilation (`swiftc` ~4s once; PowerShell `Add-Type` ~300–500ms per worker start) and make macOS TCC permissions consistent across plugin updates.
 
-18. **UI Tree Caching, Subtree Scoping & Wait-for-Condition Primitives**
+19. **UI Tree Caching, Subtree Scoping & Wait-for-Condition Primitives**
     - Cache short-lived (250–500ms) `AXUIElement` / UIA snapshots keyed by `(pid, window_id)` and support scoped root queries (`window_id` / `element_id`) instead of always walking the full app tree.
     - Replace blind `wait(ms)` polling loops with native condition waiters inside the persistent workers:
       - `until_ui_element`: Resolve immediately once a matching button/label appears.
