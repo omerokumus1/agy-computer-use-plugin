@@ -1,72 +1,121 @@
 # Future Development & Roadmap Suggestions
 
-This document captures prioritized architectural improvements, feature ideas, and platform expansions for future iterations of the **Computer Use** plugin (`computer-use`).
+This document outlines prioritized engineering improvements for future versions of the **Computer Use** plugin (`computer-use`), focusing on four core pillars requested for the next release cycle: **Token Efficiency**, **Integration with `agy-context-plugin`**, **Guardrails**, and **Runtime Performance** — followed by longer-term ecosystem milestones.
 
 ---
 
-## v0.2.0 — Visual Grounding & Windows Verification
+## Next Version Priorities (v0.2.0 – v0.3.0)
 
-1. **Set-of-Mark (SoM) Annotated Screenshots**
-   - Add an `annotate_ui: true` option to `screenshot` that combines `get_ui_tree` bounding boxes with the captured screenshot, drawing numbered bounding boxes (`[1]`, `[2]`, ...) directly onto the image and returning a compact legend `{id, role, name, center_x, center_y}`.
-   - Greatly reduces click coordinate hallucinations on dense apps (IDEs, spreadsheets, CAD tools).
+### 1. Token Efficiency
 
-2. **Native Image Grid & Coordinate Overlay in Driver**
-   - Currently optional grid overlay metadata/SVG or native drawing can be rendered directly inside the Swift (`CoreGraphics` `CGContext`) and Windows C# (`System.Drawing.Graphics`) screenshot pipelines with crisp coordinate ticks every 200px so zero extra dependencies are needed.
+Visual desktop loops can consume tens of thousands of multimodal and JSON tokens if every step sends full-screen images and unpruned accessibility trees.
 
-3. **Windows CI & Automated Integration Matrix**
-   - Add a GitHub Actions workflow (`windows-latest` + `macos-latest`) that boots the MCP server, runs `screenshot`, `list_windows`, `get_ui_tree`, `clipboard_write`/`clipboard_read`, and validates `agy plugin validate --strict .` on every PR.
+1. **Adaptive Screenshot Resolution, Quality & Auto-Cropping**
+   - Default routine verification captures to `max_width: 960` and JPEG `quality: 68`–`75`, reserving `1440+` or PNG for dense text/UI grounding.
+   - Automatically scope `screenshot` to the focused/target window (`window_id`) when `app_name` is active instead of capturing the entire multi-monitor desktop.
 
-4. **macOS `ScreenCaptureKit` Upgrade (macOS 14+)**
-   - Replace `screencapture` subprocess calls inside `macos_helper.swift` with `ScreenCaptureKit` (`SCShareableContent` + `SCScreenshotManager`) for sub-80ms in-memory captures of specific windows even when partially occluded, without writing temporary files to disk.
+2. **Region-Diff & Changed-Bounding-Box Screenshots**
+   - Retain a lightweight downscaled hash/buffer of the previous screenshot inside the native Swift/C# worker.
+   - When `diff_only: true` is enabled:
+     - If nothing changed on screen, return `{ "unchanged": true }` with **zero image bytes**.
+     - If `< 35%` of the frame changed, crop strictly to the dirty bounding box (`diff_bounds` in logical screen coordinates) and return only that region (~60–85% vision token reduction during typing, terminal watching, and form filling).
 
----
+3. **Compact Accessibility Tree Serialization & Structural Pruning**
+   - Add a `compact: true` output mode for `get_ui_tree` that strips decorative/empty container nodes (`AXGroup`, `AXRulerMarker`, `Pane`, empty `AXRow`s) and formats elements as compact records (`[id] role "title" val="..." @(cx,cy)`), cutting JSON structural overhead by 50–75%.
 
-## v0.3.0 — Semantic Reliability & Faster Feedback Loops
+4. **Set-of-Mark (SoM) Visual Grounding (`annotate_ui: true`)**
+   - Overlay numbered tags (`[1]`, `[2]`, …) onto interactive UI elements directly inside Swift (`CGContext`) and Windows C# (`System.Drawing.Graphics`), returning a tiny `{ id, role, title, cx, cy }` legend so the model picks an element ID instead of parsing deep trees or guessing pixels.
 
-5. **Wait-for-Visual / Wait-for-UI-Change Conditions**
-   - Upgrade `wait` with smart conditions:
-     - `until_ui_element`: Poll `find_ui_elements` until a button/dialog appears (e.g., `"Save"`, `"Build Succeeded"`).
-     - `until_screen_changes`: Hash downscaled region pixels and return as soon as the UI stops changing (settle detection after clicking a slow action).
-
-6. **Direct Accessibility Actions (`AXPress` / UIA `InvokePattern` / `ValuePattern`)**
-   - Add an optional `native_action: true` mode in `click_ui_element` and a `set_ui_value` tool that invokes native Accessibility actions (`AXPress`, `AXRaise`, UIA `InvokePattern`, `ValuePattern.SetValue`, `TogglePattern`) without moving the physical mouse cursor—enabling background-window automation where supported.
-
-7. **Diff-Only / Cropped Follow-Up Screenshots**
-   - Compute a bounding box of pixels changed since the previous screenshot and optionally return only the changed crop + full coordinates, cutting multimodal token usage by 60–85% during repetitive form-filling or terminal/UI monitoring loops.
-
-8. **Built-In OCR Fallback (macOS Vision & Windows.Media.Ocr)**
-   - Add a `find_text_on_screen` tool using **Apple Vision** (`VNRecognizeTextRequest`, built into macOS) and **Windows OCR** (`Windows.Media.Ocr`, built into Win10/11).
-   - Crucial for Electron apps, games, RDP/VNC windows, or custom Canvas UIs that expose sparse accessibility trees.
+5. **Composite `act_and_verify` / `batch_actions` Tool**
+   - Execute short deterministic sequences (e.g., `focus_window` → `mouse_click` → `type_text` → `press_key` → `wait` → `screenshot`) in a single MCP round-trip, avoiding multiple LLM turns and repeated conversation context prefixes.
 
 ---
 
-## v0.4.0 — Safety, Privacy & Developer UX
+### 2. Integration with `agy-context-plugin`
 
-9. **Antigravity Sidecar Live Preview & Action Replay Pane**
-   - Add an optional Antigravity `sidecars/` UI panel showing:
-     - Live thumbnail of the last screenshot with click/drag markers overlaid.
-     - One-click **Emergency Pause / Resume** toggle button (manages `${PLUGIN_DATA}/EMERGENCY_STOP`).
-     - Real-time action ledger parsed from `${PLUGIN_DATA}/audit.jsonl`.
+Combining `computer-use` with [`agy-context-plugin`](https://github.com/omerokumus1/agy-context-plugin) turns passive token monitoring into **context-aware desktop automation**:
 
-10. **Sensitive Window & Region Redaction**
-    - Automatically detect password managers (1Password, Bitwarden, Keychain Access), banking tabs, or OS `AXSecureTextField` / `IsPassword` elements and blur/mask those bounding boxes before returning screenshots to the model.
+6. **Live Context-Pressure Adaptation**
+   - Read active session token usage, context ceiling, and prompt cache hit rate from Antigravity's local Language Server Connect-RPC / SQLite conversation store (using the same zero-token telemetry pipeline as `agy-context-plugin`'s `lib/rpc.mjs`, `lib/sqlite-fallback.mjs`, and `lib/telemetry.mjs`):
+     - **`< 60%` Context Used**: Full-detail mode (`max_width: 1440`, `max_depth: 5` UI trees).
+     - **`60%–80%` Context Used**: Automatically step down `screenshot` defaults (`max_width: 960`, active-window crop) and set `interactive_only: true` + `compact: true` on `get_ui_tree`.
+     - **`> 80%` Context Used**: Prefer `find_ui_elements` / `diff_only` captures and emit a `context_pressure: "high"` advisory recommending `/compact` or delegating remaining GUI steps to a fresh `computer-operator` subagent.
 
-11. **Global OS Emergency Hotkey Listener**
-    - Allow the user to press a physical emergency abort shortcut (e.g., `Ctrl+Alt+Shift+Escape` / `Cmd+Option+Shift+Escape`) that writes `${PLUGIN_DATA}/EMERGENCY_STOP`, immediately halting any ongoing `computer-operator` automation loop.
+7. **Prompt Cache Preservation & Frame Offloading**
+   - Keep `rules/AGENTS.md` and MCP tool definitions deterministic so prompt prefixes stay cacheable (maximizing `agy-context-plugin`'s **Cache Hit %**).
+   - Optionally return a file reference or downscaled thumbnail for historical frames and persist full-resolution captures in `${PLUGIN_DATA}/frames/` so old screenshots don't pollute long-running trajectories.
 
-12. **Macro Recording & Deterministic Replay**
-    - Record successful tool trajectories (UI element selectors + fallback coordinates) into reusable `.json` workflows stored in `${PLUGIN_DATA}/macros/`, enabling instant deterministic replay without LLM turns.
+8. **Vision & UI-Tree Spike Attribution in `agy-context-plugin`**
+   - Emit structured metadata (`image_bytes`, `image_size`, `ui_nodes_count`, `estimated_tokens`) in tool results and `${PLUGIN_DATA}/audit.jsonl` so `agy-context-plugin`'s **Top 5 Context Spikes** and **Turn Timeline** can break down GUI vision spikes vs code-reading spikes.
+
+9. **Unified Sidecar Telemetry Surface**
+   - Expose a lightweight local status endpoint / shared state file (`${PLUGIN_DATA}/live_state.json`) so either:
+     - `agy-context-plugin` can display a **Computer Use Cost & Action** badge inside its `AUX_PANE` / `SIDEBAR`, or
+     - `computer-use` ships an optional companion `sidecars/` pane (built with `sidecar_sdk`, matching `agy-context-plugin`) displaying the last captured frame with click markers, live context budget impact, audit ledger, and a one-click **Emergency Stop** toggle.
 
 ---
 
-## v1.0.0 — Ecosystem & Cross-Platform Expansion
+### 3. Guardrails & Safety Hardening
 
-13. **Linux Desktop Driver (X11 & Wayland)**
-    - Support X11 (`xdotool`/`xrandr`/`scrot`/AT-SPI2) and Wayland (`ydotool`/`wlr-randr`/`grim`/xdg-desktop-portal RemoteDesktop) to cover all three desktop OSes.
+10. **Deterministic Policy Profiles (`${PLUGIN_DATA}/policy.json`)**
+    - Upgrade `scripts/safety-hook.mjs` (`PreToolUse`) with configurable enforcement profiles:
+      - `observe-only`: Allows `screenshot`, `get_screen_info`, `list_windows`, `get_ui_tree`, `find_ui_elements`, `check_permissions`; denies all input/window mutation tools.
+      - `app-scoped`: Restricts clicks, typing, and `focus_window` to an explicit allowlist of applications/window titles (e.g., `["TextEdit", "Xcode", "Figma"]`).
+      - `full-control`: Full desktop access with sensitive-action gates.
 
-14. **Virtual / Secondary Desktop Isolation (Optional)**
-    - On Windows: support Windows Virtual Desktops (`IVirtualDesktopManager`) or Windows Sandbox isolation so the agent works on Desktop 2 without hijacking the user's active mouse/keyboard on Desktop 1.
-    - On macOS: support dedicated Space switching or Screen Sharing virtual session workflows.
+11. **Automatic Sensitive UI & Pixel Redaction**
+    - Detect password inputs (`AXSecureTextField` on macOS, `IsPassword` in Windows UIA) and sensitive windows (1Password, Bitwarden, Keychain Access, Windows Credential Manager) to:
+      - Blur/mask those bounding boxes in-memory before encoding `screenshot` images.
+      - Redact `value` fields in `get_ui_tree` / `find_ui_elements` and auto-enable log redaction in `safety-hook.mjs`.
 
-15. **Multi-Agent Guardrails & Approval Tiers**
-    - Configurable policy profiles (`observe-only`, `app-scoped` allowlist, `full-control`) persisted in `${PLUGIN_DATA}/policy.json` and enforced deterministically in `scripts/safety-hook.mjs`.
+12. **Destructive Action & Risky Hotkey Gates**
+    - Intercept high-risk GUI actions in `safety-hook.mjs` and return `"decision": "ask"` (prompting user approval) when:
+      - Clicking controls labeled `Delete`, `Empty Trash`, `Erase`, `Format`, `Purchase`, `Pay`, `Send`, or `Quit` on protected apps.
+      - Executing destructive system hotkeys or shell-launch chords (e.g., `Cmd+Option+Esc`, `Alt+F4` on Antigravity itself, or `launch_app` on unknown executables).
+
+13. **Runaway Loop & Rate-Limit Circuit Breakers**
+    - Track recent tool calls in `${PLUGIN_DATA}/hook_state.json` inside `safety-hook.mjs`:
+      - Block or pause after `N` consecutive identical clicks/keystrokes at unchanged coordinates.
+      - Enforce configurable actions-per-minute and per-turn GUI step budgets (`max_actions_per_turn`).
+
+14. **Global Physical Emergency Stop Hotkey**
+    - Register an OS-level abort shortcut (e.g., `Cmd+Option+Shift+Escape` on macOS, `Ctrl+Alt+Shift+Escape` on Windows) that immediately writes `${PLUGIN_DATA}/EMERGENCY_STOP`, halting any ongoing `computer-operator` loop on the very next `PreToolUse` check.
+
+---
+
+### 4. Performance Optimization
+
+15. **macOS `ScreenCaptureKit` In-Memory Pipeline (macOS 14+)**
+    - Replace `/usr/sbin/screencapture` subprocess calls and temporary PNG disk files in `macos_helper.swift` with `ScreenCaptureKit` (`SCShareableContent` + `SCScreenshotManager`).
+    - Cuts single-frame capture latency from ~120–200ms down to `< 40–60ms`, eliminates disk I/O, and supports capturing specific windows cleanly even when partially occluded.
+
+16. **Windows DXGI Desktop Duplication (`IDXGIOutputDuplication`)**
+    - Add a GPU-accelerated capture path alongside GDI+ `CopyFromScreen` in `win_worker.ps1` for sub-30ms multi-monitor captures and hardware-provided dirty-rect regions.
+
+17. **Pre-Built / Signed Native Helper Distribution**
+    - Distribute pre-compiled, signed universal binaries for macOS (`arm64` + `x86_64`) and an optional ahead-of-time compiled `.NET` helper DLL/executable on Windows to eliminate cold startup compilation (`swiftc` ~4s once; PowerShell `Add-Type` ~300–500ms per worker start) and make macOS TCC permissions consistent across plugin updates.
+
+18. **UI Tree Caching, Subtree Scoping & Wait-for-Condition Primitives**
+    - Cache short-lived (250–500ms) `AXUIElement` / UIA snapshots keyed by `(pid, window_id)` and support scoped root queries (`window_id` / `element_id`) instead of always walking the full app tree.
+    - Replace blind `wait(ms)` polling loops with native condition waiters inside the persistent workers:
+      - `until_ui_element`: Resolve immediately once a matching button/label appears.
+      - `until_screen_settles`: Return as soon as consecutive frame hashes stabilize.
+
+---
+
+## Longer-Term Ecosystem Roadmap (v0.4.0 – v1.0.0)
+
+19. **Built-In Native OCR (`VNRecognizeTextRequest` & `Windows.Media.Ocr`)**
+    - Add a `find_text_on_screen` tool using OS-built-in OCR for Canvas apps, Electron views, games, and remote desktop windows with sparse accessibility trees.
+
+20. **Windows CI & Automated Integration Matrix**
+    - Add GitHub Actions CI (`macos-latest` + `windows-latest`) running `agy plugin validate --strict .`, MCP protocol tests, PowerShell/Win32/UIA live tests, and coordinate scaling assertions on every commit.
+
+21. **Macro Recording & Deterministic Replay**
+    - Save verified UI-element action sequences into `${PLUGIN_DATA}/macros/*.json` for zero-LLM-token deterministic replay of repetitive desktop workflows.
+
+22. **Linux Desktop Driver (X11 & Wayland)**
+    - Add `scripts/drivers/linux.mjs` supporting X11 (`xdotool`/`xrandr`/`scrot`/AT-SPI2) and Wayland (`ydotool`/`grim`/`xdg-desktop-portal`).
+
+23. **Virtual / Secondary Desktop Isolation**
+    - Support Windows Virtual Desktops (`IVirtualDesktopManager`) and dedicated macOS Spaces so autonomous desktop work can run in the background without stealing the user's primary workspace focus.

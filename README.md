@@ -45,6 +45,7 @@ To immediately halt all computer-use tool calls:
 
 ## Documentation
 
+- [Architecture & Diagrams](ARCHITECTURE.md)
 - [Product Requirements Document](PRD.md)
 - [Future Development & Roadmap](FUTURE_DEVELOPMENT.md)
 - [Platform Shortcuts & Coordinate Guide](skills/computer-use/references/platform-guide.md)
