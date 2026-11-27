@@ -165,7 +165,7 @@ node --test tests/plugin.test.mjs
 
 - **GitHub**: [@omerokumus1](https://github.com/omerokumus1)
 - **LinkedIn**: [Ömer Faruk Okumuş](https://www.linkedin.com/in/omerokumus1/)
-- **X (Twitter)**: [@omerokumusx](https://x.com/omerokumusx)
+- **X (Twitter)**: [@omerokumusx](https://x.com/omerokumusx) · [@omerokumusx_tr](https://x.com/omerokumusx_tr)
 
 ---
 
