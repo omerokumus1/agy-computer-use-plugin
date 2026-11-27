@@ -1,7 +1,7 @@
 # Product Requirements Document (PRD): Computer Use Plugin for Antigravity
 
 - **Product Name**: `computer-use` (Display Name: **Computer Use**)
-- **Version**: 0.1.0
+- **Version**: 1.0.0
 - **Author / Maintainer**: omerokumus1
 - **Platforms**: macOS (13+ Ventura / Sonoma / Sequoia, Apple Silicon & Intel) and Windows (10 / 11, x64 & ARM64)
 - **Target Host**: Google Antigravity (Antigravity App, Antigravity IDE, Antigravity CLI)
@@ -156,7 +156,7 @@ scripts/drivers/macos.mjs       scripts/drivers/windows.mjs
 
 ---
 
-## 8. Acceptance Criteria (v0.1.0)
+## 8. Acceptance Criteria (v1.0.0)
 
 - [ ] `agy plugin validate --strict .` passes with **0 errors and 0 warnings**.
 - [ ] MCP server responds cleanly to `initialize`, `tools/list`, and `tools/call` over stdio JSON-RPC 2.0.

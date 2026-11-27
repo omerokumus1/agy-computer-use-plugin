@@ -1,6 +1,6 @@
 # Architecture — Computer Use Plugin for Google Antigravity
 
-This document describes the architecture, runtime components, data flows, coordinate math, and cross-platform driver design of the **Computer Use** plugin (`computer-use` v0.1.0).
+This document describes the architecture, runtime components, data flows, coordinate math, and cross-platform driver design of the **Computer Use** plugin (`computer-use` v1.0.0).
 
 ---
 

@@ -5,7 +5,7 @@ import { sleep } from "./drivers/common.mjs";
 const PROTOCOL_VERSION = "2024-11-05";
 const SERVER_INFO = {
   name: "computer-use-desktop",
-  version: "0.1.0",
+  version: "1.0.0",
 };
 
 const TOOLS = [
